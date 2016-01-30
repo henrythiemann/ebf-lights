@@ -27,11 +27,11 @@ public class OPC
     this.host = host;
     this.port = port;
     this.enableShowLocations = true;
-    parent.registerDraw(this);
+    parent.registerMethod("draw", this);
   }
 
   // Set the location of a single LED
-  void led(int index, int x, int y)  
+  void led(int index, int x, int y)
   {
     // For convenience, automatically grow the pixelLocations array. We do want this to be an array,
     // instead of a HashMap, to keep draw() as fast as it can be.
@@ -43,7 +43,7 @@ public class OPC
 
     pixelLocations[index] = x + width * y;
   }
-  
+
   // Set the location of several LEDs arranged in a strip.
   // Angle is in radians, measured clockwise from +X.
   // (x,y) is the center of the strip.
@@ -89,7 +89,7 @@ public class OPC
   {
     enableShowLocations = enabled;
   }
-  
+
   // Enable or disable dithering. Dithering avoids the "stair-stepping" artifact and increases color
   // resolution by quickly jittering between adjacent 8-bit brightness levels about 400 times a second.
   // Dithering is on by default.
@@ -120,7 +120,7 @@ public class OPC
   {
     firmwareConfig &= 0x0C;
     sendFirmwareConfigPacket();
-  }    
+  }
 
   // Manually turn the Fadecandy onboard LED on or off. This disables automatic LED control.
   void setStatusLed(boolean on)
@@ -131,7 +131,7 @@ public class OPC
     else
       firmwareConfig &= ~0x08;
     sendFirmwareConfigPacket();
-  } 
+  }
 
   // Set the color correction parameters
   void setColorCorrection(float gamma, float red, float green, float blue)
@@ -139,7 +139,7 @@ public class OPC
     colorCorrection = "{ \"gamma\": " + gamma + ", \"whitepoint\": [" + red + "," + green + "," + blue + "]}";
     sendColorCorrectionPacket();
   }
-  
+
   // Set custom color correction parameters from a string
   void setColorCorrection(String s)
   {
@@ -154,7 +154,7 @@ public class OPC
       // We'll do this when we reconnect
       return;
     }
- 
+
     byte[] packet = new byte[9];
     packet[0] = 0;          // Channel (reserved)
     packet[1] = (byte)0xFF; // Command (System Exclusive)
@@ -216,7 +216,7 @@ public class OPC
       // No pixels defined yet
       return;
     }
- 
+
     if (output == null) {
       // Try to (re)connect
       connect();
@@ -251,7 +251,7 @@ public class OPC
       updatePixels();
     }
   }
-  
+
   // Change the number of pixels in our output packet.
   // This is normally not needed; the output packet is automatically sized
   // by draw() and by setPixel().
@@ -268,7 +268,7 @@ public class OPC
       packetData[3] = (byte)(numBytes & 0xFF);
     }
   }
-  
+
   // Directly manipulate a pixel in the output buffer. This isn't needed
   // for pixels that are mapped to the screen.
   void setPixel(int number, color c)
@@ -282,7 +282,7 @@ public class OPC
     packetData[offset + 1] = (byte) (c >> 8);
     packetData[offset + 2] = (byte) c;
   }
-  
+
   // Read a pixel from the output buffer. If the pixel was mapped to the display,
   // this returns the value we captured on the previous frame.
   color getPixel(int number)
@@ -341,9 +341,8 @@ public class OPC
     } catch (IOException e) {
       dispose();
     }
-    
+
     sendColorCorrectionPacket();
     sendFirmwareConfigPacket();
   }
 }
-

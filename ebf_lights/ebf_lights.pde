@@ -1,17 +1,11 @@
+import codeanticode.syphon.*;
 import ddf.minim.analysis.*;
 import ddf.minim.*;
 
+SyphonClient client;
+PImage img;
+
 OPC opc;
-
-// Audio Stuff
-Minim minim;
-AudioPlayer song;
-FFT fft;
-float[] fftFilter;
-
-String songFilename = "jaar.mp3";
-float decay = 0.97;
-
 
 /** Constants **/
 static int NumLEDsPerStrip = 30;
@@ -23,108 +17,109 @@ static float SpacingBetweenLEDs = LEDInches / NumLEDsPerStrip;
 static float DistanceBetweenStrips = 5.625;
 static float ScalingFactor = 10;
 
-// The fft filter buffer length is 256
-static int LFStartIndex = 4;
-static int LFEndIndex = 5;
-static int HFStartIndex = 32;
-static int HFEndIndex = 64;
-
+void settings() {
+  size(int(WidthInches * ScalingFactor), int(WidthInches * ScalingFactor*9.0/16.0), P3D);
+  PJOGL.profile = 1;
+}
 
 void setup()
 {
-  size(int(WidthInches * ScalingFactor), int(HeightInches * ScalingFactor));
-      
-  setupAudio();
+  client = new SyphonClient(this);
 
   // Connect to the local instance of fcserver
   opc = new OPC(this, "127.0.0.1", 7890);
-  
-  float rotate1 = (13 * PI) / 4;
-  float spacing = SpacingBetweenLEDs * ScalingFactor;
-  float startX = (LEDInches / sqrt(2) / 2) * ScalingFactor;
-  float incrementX = DistanceBetweenStrips * ScalingFactor;
-  float y = height / 2;
+  opc.showLocations(false);
+  opc.setDithering(false);
+  opc.setInterpolation(false);
 
-  for (int i = 0; i < NumStrips / 2; i++) {
+  float calibrationNudgeX = DistanceBetweenStrips*ScalingFactor/2 - 4;
+  float calibrationNudgeY = -16.5;
+
+  PVector startLeft = new PVector(calibrationNudgeX,height/4 + calibrationNudgeY);
+  PVector endRight = new PVector(0,LEDInches);
+  endRight.mult(ScalingFactor);
+  endRight.rotate(-PI/4);
+
+  PVector startRight = new PVector(width - calibrationNudgeX,height/4 + calibrationNudgeY);
+  PVector endLeft = new PVector(0,LEDInches);
+  endLeft.mult(ScalingFactor);
+  endLeft.rotate(PI/4);
+
+  for(int i = 0; i < NumStrips/2; i++) {
     int index = i * NumLEDsPerStrip;
-    float x = startX + i * incrementX;
-    opc.ledStrip(index, NumLEDsPerStrip, x, y, spacing, rotate1, false);
+    ledStripBetweenPoints(index, NumLEDsPerStrip, startLeft, PVector.add(startLeft, endRight), true);
+    startLeft.x += DistanceBetweenStrips * ScalingFactor;
   }
 
-  float rotate2 = (7 * PI) / 4;
-  startX = startX + incrementX * 3.5;
-
-  for (int i = 0; i < NumStrips / 2; i++) {
-    int index = (NumStrips - i - 1) * NumLEDsPerStrip;
-    float x = startX + i * incrementX;
-    opc.ledStrip(index, NumLEDsPerStrip, x, y, spacing, rotate2, false);
-  }
-}
-
-void setupAudio() {
-  minim = new Minim(this);
- 
- // Small buffer size!
-  song = minim.loadFile(songFilename, 512);
-  fft = new FFT(song.bufferSize(), song.sampleRate());
-  fftFilter = new float[fft.specSize()]; 
-}
-
-void keyPressed()
-{
-  
-  // S to start song at position
-  if (key == 's' || key == 'S') {
-    song.cue(200000);
-    song.play();
+  for(int i = 0; i < NumStrips/2; i++) {
+    int index = NumStrips/2*NumLEDsPerStrip + i*NumLEDsPerStrip;
+    ledStripBetweenPoints(index, NumLEDsPerStrip, startRight, PVector.add(startRight, endLeft), true);
+    startRight.x -= DistanceBetweenStrips * ScalingFactor;
   }
 }
 
 void draw()
 {
   background(0);
-  
-  drawFrequencyBars();
+  noStroke();
+  if (client.newFrame()) {
+    img = client.getImage(img); // load the pixels array with the updated image info (slow)
+    // img = client.getImage(img, false); // does not load the pixels array (faster)
+  }
+  if (img != null) {
+    image(img, 0, 0, width, height);
+  }
+  //
+  // fill(0,255,0);
+  // rightTriangle(width/2, height/4 + 10, 600);
+  //
+  // fill(255,0,0);
+  // pushMatrix();
+  // translate(250, 337);
+  // rotate(PI);
+  // rightTriangle(0,0, 600);
+  // popMatrix();
+  //
+  // fill(0,0,255);
+  // pushMatrix();
+  // translate(width-250, 337);
+  // rotate(PI);
+  // rightTriangle(0,0, 600);
+  // popMatrix();
+  // Calibration crosshairs
+  // noStroke();
+  // rect(width/2-1, 0,2,height);
+  // rect(0,height/2-1,width,2);
 }
 
-void drawFrequencyBars() {
-  // Pass the audio data through an fft.
-  fft.forward(song.mix);  
-  for (int i = 0; i < fftFilter.length; i++) {
-    fftFilter[i] = max(fftFilter[i] * decay, log(1 + fft.getBand(i)));
-  }
-  
-  // Average the values in the low frequency range of the fft (defined in constants).
-  float lfAverage = 0;
-  for (int i = LFStartIndex; i <= LFEndIndex; i++) {
-    lfAverage += fftFilter[i];
-  }
-  lfAverage /= LFEndIndex - LFStartIndex;
-
-  // Average the values in the high frequency range of the fft (defined in constants).
-  float hfAverage = 0;
-  for (int i = HFStartIndex; i <= HFEndIndex; i++) {
-    hfAverage += fftFilter[i];
-  }
-  hfAverage /= HFEndIndex - HFStartIndex;
-
-  // Scale the averages
-  float lfScalingValue = scaledValueFromAverage(lfAverage, 4);
-  float hfScalingValue = scaledValueFromAverage(hfAverage, 2);
-
-  // Draw a rect on the left half of the screen scaled by the low frequencies.
-  for (int i = 0; i < 8; i++) {
-    rect(0, height, width / 2, -height * lfScalingValue);
-  }
-
-  // Draw a rect on the right half of the screen scaled by the high frequencies.
-  for (int i = 8; i < 16; i++) {
-    rect(width / 2, height, width / 2, -height * hfScalingValue);
+void ledStripBetweenPoints(int index, int stripLength, PVector start, PVector end, boolean reverse) {
+  for(int i = 0; i < stripLength; i++) {
+    if (reverse) {
+      opc.led(
+        index + (stripLength - 1 - i),
+        int(lerp(start.x, end.x, float(i)/float(stripLength))),
+        int(lerp(start.y, end.y, float(i)/float(stripLength)))
+      );
+    } else {
+      opc.led(
+        index + i,
+        int(lerp(start.x, end.x, float(i)/float(stripLength))),
+        int(lerp(start.y, end.y, float(i)/float(stripLength)))
+      );
+    }
   }
 }
 
-float scaledValueFromAverage(float average, float scale) {
-  // pow(average, 0.75) * pow(60/(60-i), 0.4);
-  return pow(average, 0.75) / scale;
-}
+void rightTriangle( float topX, float topY, float sideLength ) {
+  pushMatrix();
+  beginShape();
 
+  float h = sideLength*sqrt(2);
+  translate( topX, topY );
+  vertex(0,0);
+  vertex( -h/2, .5*sideLength*sqrt(2));
+  vertex( +h/2, .5*sideLength*sqrt(2));
+
+  endShape( CLOSE );
+  popMatrix();
+}
